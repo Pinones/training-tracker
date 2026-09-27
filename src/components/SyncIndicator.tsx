@@ -1,12 +1,13 @@
 import { Link } from 'react-router';
 import { db } from '../db/db';
+import { pendingChanges } from '../sync/engine';
 import { useLiveQuery } from '../lib/useLiveQuery';
 import { useSyncStatus } from '../sync/controller';
 import { strings } from '../strings';
 
 /** Always-visible save state. Tapping it opens the sync details in Settings. */
 export function SyncIndicator() {
-  const pending = useLiveQuery(() => db.outbox.count());
+  const pending = useLiveQuery(() => pendingChanges(db));
   const { online, running } = useSyncStatus();
   if (pending === undefined) return null;
 

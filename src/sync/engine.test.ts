@@ -4,7 +4,7 @@ import { createDB, type TrainingDB } from '../db/db';
 import { deterministicId } from '../db/ids';
 import type { BodyweightRow } from '../db/types';
 import { baseRow, saveRow, softDelete, updateRow } from '../db/write';
-import { clearLocalData, pendingCount, pull, push, syncOnce, PULL_PAGE } from './engine';
+import { clearLocalData, pendingChanges, pendingCount, pull, push, syncOnce, PULL_PAGE } from './engine';
 import { FakeRemote, FakeServer } from './fakeRemote';
 
 const ALICE = '11111111-1111-4111-8111-111111111111';
@@ -60,6 +60,7 @@ describe('writes and the outbox', () => {
     await updateRow(phone, 'bodyweights', row.id, { weight: 88.2 });
     await updateRow(phone, 'bodyweights', row.id, { weight: 88.3 });
     expect(await pendingCount(phone)).toBe(3);
+    expect(await pendingChanges(phone)).toBe(1); // shown to the user as "1 change"
     await push(phone, remote);
     expect(remote.upsertCalls).toBe(1);
     expect(server.table('bodyweights').get(row.id)!).toMatchObject({ weight: 88.3 });
@@ -190,6 +191,27 @@ describe('pull', () => {
     await syncOnce(laptop, laptopRemote);
     await syncOnce(laptop, laptopRemote);
     expect(await laptop.bodyweights.count()).toBe(2);
+  });
+
+  it('applies a pull all-or-nothing: never half a sync', async () => {
+    await logWeight(phone, ALICE, '2026-09-26', 88);
+    const profile = { ...baseRow(ALICE, ALICE), display_name: 'A', timezone: 'Europe/Stockholm', track_bodyweight: true, bw_goal_kg: null };
+    await saveRow(phone, 'profiles', profile);
+    await syncOnce(phone, remote);
+
+    const laptop = device();
+    const flaky = new FakeRemote(server, ALICE);
+    const realPull = flaky.pull.bind(flaky);
+    flaky.pull = async (table, after, limit) => {
+      if (table === 'bodyweights') throw new TypeError('Failed to fetch'); // connection drops mid-sync
+      return realPull(table, after, limit);
+    };
+    await expect(pull(laptop, flaky)).rejects.toThrow();
+    // profiles was downloaded before the failure, but nothing was applied.
+    expect(await laptop.profiles.count()).toBe(0);
+    await pull(laptop, new FakeRemote(server, ALICE));
+    expect(await laptop.profiles.count()).toBe(1);
+    expect(await laptop.bodyweights.count()).toBe(1);
   });
 
   it('soft deletes propagate as deleted_at, never as removed rows', async () => {

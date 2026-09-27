@@ -2,7 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { db } from '../db/db';
 import { supabase } from '../lib/supabase';
-import { clearLocalData, pendingCount } from '../sync/engine';
+import { clearLocalData, pendingChanges, pendingCount } from '../sync/engine';
 import { startSync, stopSync, syncNow } from '../sync/controller';
 
 const OWNER_KEY = 'owner_user_id';
@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logOut(): Promise<number> {
     if ((await pendingCount(db)) > 0) await syncNow();
-    const pending = await pendingCount(db);
+    const pending = await pendingChanges(db);
     if (pending > 0) return pending;
     await stopSync();
     await supabase.auth.signOut({ scope: 'local' });

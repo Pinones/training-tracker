@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'danger' };
 
@@ -35,8 +35,12 @@ export function Field({
   );
 }
 
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-2xl bg-slate-900 ${className}`}>{children}</div>;
+export function Card({ children, className = '', ...rest }: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
+  return (
+    <div className={`rounded-2xl bg-slate-900 ${className}`} {...rest}>
+      {children}
+    </div>
+  );
 }
 
 export function SectionTitle({ children }: { children: ReactNode }) {

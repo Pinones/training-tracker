@@ -85,44 +85,52 @@ function laterCursor(a: PullCursor | null, b: PullCursor): PullCursor {
   return b.updated_at > a.updated_at || (b.updated_at === a.updated_at && b.id > a.id) ? b : a;
 }
 
-/**
- * Pull rows changed on the server. A row with a local change still waiting in
- * the outbox is not overwritten: the local edit is newer and will be pushed.
- */
-export async function pullTable(db: TrainingDB, remote: Remote, table: SyncedTableName): Promise<number> {
+/** Download every row of `table` changed since its cursor (no local writes yet). */
+async function fetchChanges(
+  db: TrainingDB,
+  remote: Remote,
+  table: SyncedTableName,
+): Promise<{ rows: BaseRow[]; newest: PullCursor | null }> {
   const saved = ((await db.meta.get(cursorKey(table)))?.value as PullCursor | undefined) ?? null;
   let after: PullCursor | null = saved
     ? { updated_at: new Date(Date.parse(saved.updated_at) - PULL_OVERLAP_MS).toISOString(), id: ZERO_UUID }
     : null;
   let newest = saved;
-  let applied = 0;
-
+  const rows: BaseRow[] = [];
   for (;;) {
-    const rows = await remote.pull(table, after, PULL_PAGE);
-    if (rows.length === 0) break;
+    const page = await remote.pull(table, after, PULL_PAGE);
+    rows.push(...page);
+    const last = page.at(-1);
+    if (last) newest = laterCursor(newest, { updated_at: last.updated_at, id: last.id });
+    if (page.length < PULL_PAGE) break;
+    after = { updated_at: last!.updated_at, id: last!.id };
+  }
+  return { rows, newest };
+}
 
-    await db.transaction('rw', db.table(table), db.outbox, db.meta, async () => {
+/**
+ * Pull rows changed on the server. Everything is downloaded first and then applied
+ * in ONE transaction, so the app never sees half a sync (e.g. a plan's workouts
+ * without their exercises). A row with a local change still waiting in the outbox
+ * is not overwritten: the local edit is newer and will be pushed.
+ */
+export async function pull(db: TrainingDB, remote: Remote): Promise<number> {
+  const changes: { table: SyncedTableName; rows: BaseRow[]; newest: PullCursor | null }[] = [];
+  for (const table of SYNCED_TABLES) changes.push({ table, ...(await fetchChanges(db, remote, table)) });
+  if (changes.every((c) => c.rows.length === 0)) return 0;
+
+  let applied = 0;
+  await db.transaction('rw', [...SYNCED_TABLES.map((t) => db.table(t)), db.outbox, db.meta], async () => {
+    for (const { table, rows, newest } of changes) {
       for (const row of rows) {
         const pending = await db.outbox.where('[table+row_id]').equals([table, row.id]).count();
         if (pending) continue;
         await db.table(table).put(pickColumns(table, row as unknown as Record<string, unknown>));
         applied++;
       }
-      const last = rows.at(-1)!;
-      newest = laterCursor(newest, { updated_at: last.updated_at, id: last.id });
-      await db.meta.put({ key: cursorKey(table), value: newest });
-    });
-
-    if (rows.length < PULL_PAGE) break;
-    const last = rows.at(-1)!;
-    after = { updated_at: last.updated_at, id: last.id };
-  }
-  return applied;
-}
-
-export async function pull(db: TrainingDB, remote: Remote): Promise<number> {
-  let applied = 0;
-  for (const table of SYNCED_TABLES) applied += await pullTable(db, remote, table);
+      if (newest) await db.meta.put({ key: cursorKey(table), value: newest });
+    }
+  });
   return applied;
 }
 
@@ -135,6 +143,11 @@ export async function syncOnce(db: TrainingDB, remote: Remote): Promise<{ pushed
 
 export function pendingCount(db: TrainingDB): Promise<number> {
   return db.outbox.count();
+}
+
+/** Number of distinct rows waiting to sync (many edits of one row count once). */
+export async function pendingChanges(db: TrainingDB): Promise<number> {
+  return (await db.outbox.orderBy('[table+row_id]').uniqueKeys()).length;
 }
 
 /** Forget everything local (used on explicit logout / account switch). */

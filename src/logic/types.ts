@@ -68,6 +68,8 @@ export function linear(increment: number, overrides: Partial<LinearProgression> 
 
 interface ItemBase {
   optional?: boolean;
+  /** only show this item on these weekdays (e.g. a Friday-only finisher); absent = every day */
+  days?: Weekday[];
 }
 
 export interface WeightRepsConfig extends ItemBase {
@@ -93,12 +95,15 @@ export interface TimedConfig extends ItemBase {
 }
 
 export interface RunContinuousConfig extends ItemBase {
+  /** display name, e.g. "Easy run" (run items have no exercise) */
+  label: string;
   duration_min?: number;
   distance_km?: number;
   pace_note?: string;
 }
 
 export interface RunIntervalsConfig extends ItemBase {
+  label: string;
   warmup_min: number;
   work_s: number;
   recovery_s: number;

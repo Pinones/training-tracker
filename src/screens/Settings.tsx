@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { Link } from 'react-router';
 import { useAuth, useUserId } from '../auth/AuthProvider';
 import { useProfile } from '../auth/useProfile';
 import { backupFileName, exportBackup, importBackup } from '../backup/backup';
 import { Screen } from '../components/Layout';
 import { Button, Card, Field, Message, SectionTitle } from '../components/ui';
 import { db } from '../db/db';
+import { pendingChanges } from '../sync/engine';
 import type { ProfileRow } from '../db/types';
 import { updateRow } from '../db/write';
 import { todayIn } from '../logic/dates';
@@ -22,6 +24,10 @@ export function Settings() {
   return (
     <Screen title={s.title}>
       <SyncSection />
+      <Link to="/plans" className="mt-6 flex min-h-11 items-center justify-between rounded-2xl bg-slate-900 px-4 py-3">
+        <span>{s.plansLink}</span>
+        <span className="text-slate-500">→</span>
+      </Link>
       {profile && <ProfileSection profile={profile} />}
       <BackupSection timezone={profile?.timezone} />
       <AccountSection />
@@ -49,7 +55,7 @@ function formatTimestamp(iso: string): string {
 // ---------- Sync ----------
 
 function SyncSection() {
-  const pending = useLiveQuery(() => db.outbox.count());
+  const pending = useLiveQuery(() => pendingChanges(db));
   const { lastSyncAt, lastError, running, online } = useSyncStatus();
   return (
     <section id="sync">
