@@ -18,7 +18,6 @@ export default defineConfig({
       filename: 'sw.ts',
       registerType: 'prompt', // never reload mid-workout; the user taps "Reload"
       injectRegister: false, // registered manually in src/lib/pwa.ts
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Training Tracker',
         short_name: 'Training',

@@ -8,7 +8,6 @@ import {
   SignupScreen,
 } from './auth/AuthScreens';
 import { Layout, Screen } from './components/Layout';
-import { Body } from './screens/Body';
 import { Placeholder } from './screens/Placeholder';
 import { Settings } from './screens/Settings';
 import { strings } from './strings';
@@ -36,7 +35,7 @@ const router = createBrowserRouter([
           { path: 'today', element: <Placeholder title={strings.today.title} text={strings.today.empty} phase={4} /> },
           { path: 'history', element: <Placeholder title={strings.history.title} text={strings.history.empty} phase={5} /> },
           { path: 'progress', element: <Placeholder title={strings.progress.title} text={strings.progress.empty} phase={5} /> },
-          { path: 'body', element: <Body /> },
+          { path: 'body', lazy: async () => ({ Component: (await import('./screens/Body')).Body }) }, // charts load on demand
           { path: 'settings', element: <Settings /> },
           { path: '*', element: <Screen title={strings.notFound}>{null}</Screen> },
         ],
